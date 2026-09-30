@@ -1,0 +1,11 @@
+node_modules/
+dist/
+__pycache__/
+venv/
+.venv/
+.idea/
+.env
+*.pyc
+pythonProject1/
+app.py.txt
+BackEnd/change_admin.py
