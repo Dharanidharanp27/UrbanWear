@@ -15,8 +15,20 @@ from google.auth.transport import requests as google_requests
 import secrets
 
 app = Flask(__name__)
-FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
-CORS(app, origins=[FRONTEND_URL])
+
+FRONTEND_URL = os.environ.get(
+    "FRONTEND_URL",
+    "http://localhost:5173"
+)
+
+CORS(
+    app,
+    origins=[
+        "http://localhost:5173",
+        "https://urbanwear-frontend.onrender.com",
+        FRONTEND_URL
+    ]
+)
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images")
 ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "gif"}
