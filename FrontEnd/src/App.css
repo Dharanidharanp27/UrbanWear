@@ -3689,3 +3689,280 @@ Payment Method - Stage 1
   font-weight: 600;
   letter-spacing: 1px;
 }
+
+/* =========================================
+   SEARCH (user navbar + admin top bar)
+   ========================================= */
+
+.nav-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  outline: none;
+}
+
+.nav-search button {
+  flex-shrink: 0;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* User navbar (dark) */
+.navbar .nav-search {
+  flex: 1 1 220px;
+  min-width: 140px;
+  max-width: 380px;
+  margin: 0 10px;
+}
+
+.navbar .nav-search input {
+  border: 1px solid #3a3a3a;
+  background: #222222;
+  color: var(--white);
+}
+
+.navbar .nav-search input::placeholder {
+  color: var(--gray-400);
+}
+
+.navbar .nav-search input:focus {
+  border-color: var(--white);
+}
+
+.navbar .nav-search button {
+  background: var(--white);
+  color: var(--black);
+}
+
+.navbar .nav-search button:hover {
+  background: #eeeeee;
+}
+
+
+/* Mobile: logo + hamburger on row 1, search on row 2, menu on row 3 */
+@media (max-width: 768px) {
+  .logo { order: 1; }
+  .mobile-menu-button { order: 2; }
+
+  .navbar .nav-search {
+    order: 3;
+    flex: 1 1 100%;
+    max-width: none;
+    margin: 12px 0 0;
+  }
+  .nav-links {
+    order: 4;
+    max-width: none;
+  }
+
+}
+/* =========================================
+   ADMIN SIDEBAR + DASHBOARD - LARGER (desktop only)
+   ========================================= */
+
+@media (min-width: 801px) {
+  /* Wider sidebar column */
+  .admin-layout {
+    grid-template-columns: 280px minmax(0, 1fr);
+    gap: 30px;
+  }
+
+  /* Sidebar */
+  .admin-sidebar-brand { padding: 32px 26px; }
+  .admin-sidebar-brand span { font-size: 28px; }
+  .admin-sidebar-brand small { font-size: 12px; }
+
+  .admin-sidebar-nav { padding: 20px 14px; gap: 8px; }
+  .admin-sidebar-nav button { padding: 17px 18px; font-size: 17px; }
+
+  .admin-sidebar-bottom { padding: 20px 14px; }
+  .admin-sidebar-bottom button { padding: 15px 18px; font-size: 16px; }
+
+  /* Dashboard stat cards */
+  .admin-stat-grid { gap: 24px; }
+  .admin-stat-card { padding: 34px 30px; }
+  .admin-stat-card span { font-size: 16px; margin-bottom: 16px; }
+  .admin-stat-card strong { font-size: 38px; }
+
+  /* Dashboard quick management */
+  .admin-dashboard-info { padding: 34px; margin-top: 28px; }
+  .admin-dashboard-info h2 { font-size: 26px; margin-bottom: 22px; }
+  .admin-quick-grid { gap: 20px; }
+  .admin-quick-grid button { padding: 28px; }
+  .admin-quick-grid strong { font-size: 18px; margin-bottom: 10px; }
+  .admin-quick-grid span { font-size: 15px; }
+}
+
+/* Slightly narrower sidebar on small laptops */
+@media (min-width: 801px) and (max-width: 1100px) {
+  .admin-layout { grid-template-columns: 230px minmax(0, 1fr); }
+}
+
+/* =========================
+   CUSTOMER PROFILE
+   ========================= */
+
+.profile-page {
+  min-height: calc(100vh - 72px);
+  padding: 45px 20px 70px;
+}
+
+.profile-container {
+  width: 100%;
+  max-width: 760px;
+  margin: 10px auto 50px;
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: 14px;
+  padding: 38px 40px;
+  box-shadow: var(--shadow);
+}
+
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 30px;
+}
+
+.profile-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--black);
+  color: var(--white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.profile-header h1 {
+  margin: 0 0 4px;
+  font-size: 26px;
+}
+
+.profile-header p {
+  margin: 0;
+  color: var(--gray-600);
+  font-size: 14px;
+  word-break: break-word;
+}
+
+.profile-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-form label {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 7px;
+}
+
+.profile-form input,
+.profile-form select,
+.profile-form textarea {
+  width: 100%;
+  padding: 13px 14px;
+  margin-bottom: 18px;
+  border: 1px solid var(--gray-300);
+  border-radius: 6px;
+  font-size: 15px;
+  background: var(--white);
+  color: var(--black);
+  outline: none;
+}
+
+.profile-form textarea {
+  resize: vertical;
+}
+
+.profile-form input:focus,
+.profile-form select:focus,
+.profile-form textarea:focus {
+  border-color: var(--black);
+  box-shadow: 0 0 0 2px rgba(17, 17, 17, 0.05);
+}
+
+.profile-form input:disabled {
+  background: var(--gray-100);
+  color: var(--gray-600);
+  cursor: not-allowed;
+}
+
+.profile-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+}
+
+.profile-row > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.profile-section-title {
+  margin: 8px 0 6px;
+  padding-top: 20px;
+  border-top: 1px solid var(--gray-200);
+  font-size: 18px;
+}
+
+.profile-note {
+  margin: 0 0 18px;
+  color: var(--gray-600);
+  font-size: 13px;
+}
+
+.nav-links .profile-nav-button {
+  font-weight: 700;
+}
+
+/* Checkbox in the checkout form */
+.checkout-form .save-details-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.checkout-form .save-details-option input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--black);
+}
+
+@media (max-width: 600px) {
+  .profile-page {
+    padding: 25px 20px 50px;
+  }
+
+  .profile-container {
+    padding: 28px 20px;
+  }
+
+  .profile-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}

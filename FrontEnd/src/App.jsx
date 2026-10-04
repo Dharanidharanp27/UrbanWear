@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { GoogleLogin } from '@react-oauth/google'
 import "./App.css";
 
-const API_URL = "http://127.0.0.1:5000";
+const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+
+const imageUrl = (img) =>
+  `${API_URL}/images/${img || "placeholder.jpg"}`;
 
 const getWishlistKey = (user) =>
   user && user.id
@@ -25,7 +28,82 @@ const getSavedUser = () => {
     return null;
   }
 };
+const MAX_IMAGE_SIZE = 2 * 1024 * 1024; // must match Flask MAX_CONTENT_LENGTH
 
+// Resize to max 1200px and re-encode as JPEG. GIFs are left untouched.
+const compressImage = (file, maxDim = 1200, quality = 0.85) =>
+  new Promise((resolve, reject) => {
+    if (file.type === "image/gif") {
+      resolve(file);
+      return;
+    }
+
+    const img = new Image();
+    const tempUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(tempUrl);
+
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ffffff"; // transparent PNGs would turn black in JPEG
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            reject(new Error("Could not process the image."));
+            return;
+          }
+          const baseName = file.name.replace(/\.[^.]+$/, "");
+          resolve(new File([blob], `${baseName}.jpg`, { type: "image/jpeg" }));
+        },
+        "image/jpeg",
+        quality
+      );
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(tempUrl);
+      reject(new Error("This file is not a valid image."));
+    };
+
+    img.src = tempUrl;
+  });
+
+const handleImagePick = async (event, setFile, setPreview, oldPreview) => {
+  const file = event.target.files[0];
+  event.target.value = ""; // lets the user re-pick the same file
+  if (!file) return;
+
+  if (!file.type.startsWith("image/")) {
+    alert("Please choose an image file.");
+    return;
+  }
+
+  try {
+    const processed = await compressImage(file);
+
+    if (processed.size > MAX_IMAGE_SIZE) {
+      alert("Image is still larger than 2 MB. Please choose a smaller one.");
+      return;
+    }
+
+    if (oldPreview && oldPreview.startsWith("blob:")) {
+      URL.revokeObjectURL(oldPreview);
+    }
+
+    setFile(processed);
+    setPreview(URL.createObjectURL(processed));
+  } catch (error) {
+    alert(error.message);
+  }
+};
 function App() {
  const [products, setProducts] = useState([]);
  const [categories, setCategories] = useState([]);
@@ -61,7 +139,7 @@ function App() {
 
  const [searchText, setSearchText] = useState("");
  const [isSearchOpen, setIsSearchOpen] = useState(false);
-
+ const [activeSearch, setActiveSearch] = useState("");
  const [selectedSize, setSelectedSize] = useState("");
 
  // =========================
@@ -151,6 +229,27 @@ const [loginMessage, setLoginMessage] = useState("");
 const [loginError, setLoginError] = useState("");
 const [loginLoading, setLoginLoading] = useState(false);
 
+
+const [showForgot, setShowForgot] = useState(false);
+const [forgotEmail, setForgotEmail] = useState("");
+const [forgotMessage, setForgotMessage] = useState("");
+const [forgotError, setForgotError] = useState("");
+const [forgotLoading, setForgotLoading] = useState(false);
+
+const [resetToken, setResetToken] = useState(() =>
+  new URLSearchParams(window.location.search).get("reset_token") || ""
+);
+const [resetPassword, setResetPassword] = useState("");
+const [resetConfirm, setResetConfirm] = useState("");
+const [resetMessage, setResetMessage] = useState("");
+const [resetError, setResetError] = useState("");
+const [resetLoading, setResetLoading] = useState(false);
+
+const [newCategoryGender, setNewCategoryGender] = useState("Men");
+const [newCategoryName, setNewCategoryName] = useState("");
+const [categoryLoading, setCategoryLoading] = useState(false);
+const [showNewCategoryInline, setShowNewCategoryInline] = useState(false);
+
 // =========================
 // Logged-in user
 // =========================
@@ -171,13 +270,31 @@ const [loggedInUser, setLoggedInUser] = useState(() => {
  return null;
 });
 
+
+// Customer Profile
+const [showProfile, setShowProfile] = useState(false);
+const [profile, setProfile] = useState(null);
+const [profileForm, setProfileForm] = useState({
+  name: "",
+  phone: "",
+  gender: "",
+  dob: "",
+  address: "",
+  city: "",
+  pincode: "",
+});
+const [profileLoading, setProfileLoading] = useState(false);
+const [profileSaving, setProfileSaving] = useState(false);
+const [profileMessage, setProfileMessage] = useState("");
+const [profileError, setProfileError] = useState("");
+const [saveDetailsToProfile, setSaveDetailsToProfile] = useState(true);
+
 // =========================
 // ADMIN
 // =========================
 
 const [showAdmin, setShowAdmin] = useState(false);
-const [adminSection, setAdminSection] =
- useState("dashboard");
+const [adminSection, setAdminSection] =useState("dashboard");
 
 const [adminStats, setAdminStats] = useState(null);
 const [adminProducts, setAdminProducts] = useState([]);
@@ -188,22 +305,20 @@ const [adminLoading, setAdminLoading] = useState(false);
 const [adminError, setAdminError] = useState("");
 
 const [editingProduct, setEditingProduct] = useState(null);
-const [editProductLoading, setEditProductLoading] =
- useState(false);
+const [editProductLoading, setEditProductLoading] =useState(false);
 
 const [editProductName, setEditProductName] = useState("");
-const [
-  editProductDescription,
-  setEditProductDescription,
-] = useState("");
-const [editProductPrice, setEditProductPrice] =
-  useState("");
-const [editProductBrand, setEditProductBrand] =
-  useState("");
-const [editProductImage, setEditProductImage] =
-  useState("");
-const [editProductCategory, setEditProductCategory] =
-  useState("");
+const [editProductDescription,setEditProductDescription,] = useState("");
+const [editProductPrice, setEditProductPrice] =useState("");
+const [editProductBrand, setEditProductBrand] =useState("");
+
+const [editProductImage, setEditProductImage] =useState("");
+const [editProductImageFile, setEditProductImageFile] =useState(null);
+const [editProductImagePreview, setEditProductImagePreview] =useState("");
+
+const [editProductCategory, setEditProductCategory] =useState("");
+const [addProductImageFile, setAddProductImageFile] =useState(null);
+const [addProductImagePreview, setAddProductImagePreview] =useState("");
 
 const [stockProduct, setStockProduct] = useState(null);
 const [stockLoading, setStockLoading] = useState(false);
@@ -218,6 +333,8 @@ const [addProductBrand, setAddProductBrand] = useState("");
 const [addProductImage, setAddProductImage] = useState("");
 const [addProductCategory, setAddProductCategory] = useState("");
 const [addProductStock, setAddProductStock] = useState("0");
+
+
 // =========================
 // Related Products
 // =========================
@@ -401,6 +518,7 @@ const clearWishlist = () => {
   setOrderSuccess(false);
   setShowOrders(false);
   setShowAdmin(false);
+  setShowProfile(false);
   setSelectedOrder(null);
   setSelectedProduct(null);
   setSelectedSize("");
@@ -628,10 +746,12 @@ const openOrders = () => {
  setShowRegister(false);
  setShowLogin(false);
  setShowAdmin(false);
+  setShowProfile(false);
  setSelectedProduct(null);
  setSelectedSize("");
  setSelectedOrder(null);
  setIsSearchOpen(false);
+
 
   loadOrders(loggedInUser.id);
 };
@@ -768,6 +888,7 @@ const showAllProducts = () => {
   setSelectedCategory("");
   setSelectedProduct(null);
   setSearchText("");
+  setActiveSearch("");
   setSelectedSize("");
   setShowCart(false);
   setShowCheckout(false);
@@ -777,6 +898,7 @@ const showAllProducts = () => {
   setShowRegister(false);
   setShowLogin(false);
   setShowAdmin(false);
+  setShowProfile(false);
   setIsSearchOpen(false);
   setShowWishlist(false);
   setRegisterMessage("");
@@ -791,6 +913,7 @@ const showMenProducts = () => {
  setSelectedCategory("");
  setSelectedProduct(null);
   setSearchText("");
+  setActiveSearch("");
   setSelectedSize("");
   setShowCart(false);
   setShowCheckout(false);
@@ -800,6 +923,7 @@ const showMenProducts = () => {
   setShowRegister(false);
   setShowLogin(false);
   setShowAdmin(false);
+  setShowProfile(false);
   setIsSearchOpen(false);
   setShowWishlist(false);
   fetchProducts("Men");
@@ -810,6 +934,7 @@ const showWomenProducts = () => {
   setSelectedCategory("");
   setSelectedProduct(null);
   setSearchText("");
+  setActiveSearch("");
   setSelectedSize("");
   setShowCart(false);
   setShowCheckout(false);
@@ -819,6 +944,7 @@ const showWomenProducts = () => {
   setShowRegister(false);
   setShowLogin(false);
   setShowAdmin(false);
+  setShowProfile(false);
   setIsSearchOpen(false);
    setShowWishlist(false);
   fetchProducts("Women");
@@ -829,6 +955,7 @@ const showCategoryProducts = (category) => {
  setSelectedCategory(category.name);
  setSelectedProduct(null);
  setSearchText("");
+ setActiveSearch("");
  setSelectedSize("");
  setShowCart(false);
  setShowCheckout(false);
@@ -838,6 +965,7 @@ const showCategoryProducts = (category) => {
  setShowRegister(false);
  setShowLogin(false);
  setShowAdmin(false);
+  setShowProfile(false);
  setIsSearchOpen(false);
  setLoading(true);
  setShowWishlist(false);
@@ -865,6 +993,11 @@ const showCategoryProducts = (category) => {
 
 const searchProducts = () => {
  const query = searchText.trim();
+ setActiveSearch(query);
+ setShowWishlist(false);
+ setShowLogin(false);
+ setShowRegister(false);
+ setSelectedProduct(null);
 
  if (!query) {
    setSelectedGender("");
@@ -876,6 +1009,7 @@ const searchProducts = () => {
    setShowOrders(false);
    setSelectedOrder(null);
    setShowAdmin(false);
+  setShowProfile(false);
    fetchProducts();
    return;
  }
@@ -893,6 +1027,7 @@ const searchProducts = () => {
  setShowRegister(false);
  setShowLogin(false);
  setShowAdmin(false);
+  setShowProfile(false);
 
  fetch(
   `${API_URL}/api/search?q=` +
@@ -936,6 +1071,7 @@ const openProductDetails = (productId) => {
  setShowRegister(false);
  setShowLogin(false);
  setShowAdmin(false);
+  setShowProfile(false);
  setIsSearchOpen(false);
 
  fetch(`${API_URL}/api/products/${productId}`)
@@ -979,6 +1115,7 @@ const openRegister = () => {
   setOrderSuccess(false);
   setShowOrders(false);
   setShowAdmin(false);
+  setShowProfile(false);
   setSelectedOrder(null);
   setSelectedProduct(null);
   setSelectedSize("");
@@ -1109,6 +1246,7 @@ const handleRegister = (event) => {
 // Login
 // =========================
 const openLogin = () => {
+  setShowForgot(false);
   setShowLogin(true);
   setShowRegister(false);
   setShowCart(false);
@@ -1116,6 +1254,7 @@ const openLogin = () => {
   setOrderSuccess(false);
   setShowOrders(false);
   setShowAdmin(false);
+  setShowProfile(false);
   setSelectedOrder(null);
   setSelectedProduct(null);
   setSelectedSize("");
@@ -1131,6 +1270,7 @@ const closeLogin = () => {
 };
 
 const goToLogin = () => {
+ setShowForgot(false);
  setShowRegister(false);
  setShowLogin(true);
 
@@ -1239,7 +1379,12 @@ const handleLogout = () => {
  localStorage.removeItem(
    "urbanwearUser"
  );
-
+  setProfile(null);
+  setCheckoutName("");
+  setCheckoutPhone("");
+  setCheckoutAddress("");
+  setCheckoutCity("");
+  setCheckoutPincode("");
  setCart([]);
  setCartTotal(0);
 
@@ -1252,6 +1397,7 @@ const handleLogout = () => {
   setShowCheckout(false);
   setShowOrders(false);
   setShowAdmin(false);
+  setShowProfile(false);
   setOrderSuccess(false);
   setSelectedProduct(null);
   setSelectedSize("");
@@ -1367,6 +1513,7 @@ const openCart = () => {
  setOrderSuccess(false);
  setShowOrders(false);
  setShowAdmin(false);
+  setShowProfile(false);
  setSelectedOrder(null);
  setSelectedProduct(null);
  setSelectedSize("");
@@ -1534,6 +1681,7 @@ const openCheckout = () => {
  setShowCheckout(true);
  setShowOrders(false);
  setShowAdmin(false);
+  setShowProfile(false);
  setSelectedOrder(null);
  setShowRegister(false);
  setShowLogin(false);
@@ -1541,9 +1689,11 @@ const openCheckout = () => {
  setSelectedSize("");
  setIsSearchOpen(false);
 
-  setCheckoutName(
-    loggedInUser.name || ""
-  );
+    setCheckoutName((current) => current || (profile && profile.name) || loggedInUser.name || "");
+  setCheckoutPhone((current) => current || (profile && profile.phone) || "");
+  setCheckoutAddress((current) => current || (profile && profile.address) || "");
+  setCheckoutCity((current) => current || (profile && profile.city) || "");
+  setCheckoutPincode((current) => current || (profile && profile.pincode) || "");
 };
 
 const backToCart = () => {
@@ -1649,6 +1799,9 @@ const handlePayment = async () => {
       }
 
       // Order created successfully
+
+      saveCheckoutDetailsToProfile();
+
       setPlacedOrderId(data.order_id);
 
       setPlacedOrderTotal(
@@ -1822,6 +1975,8 @@ if (!response.ok) {
   );
 }
 
+saveCheckoutDetailsToProfile();
+
 setPlacedOrderId(
   data.order_id
 );
@@ -1883,6 +2038,7 @@ const viewOrdersAfterSuccess = () => {
  setShowCart(false);
  setShowOrders(true);
  setShowAdmin(false);
+  setShowProfile(false);
  setSelectedOrder(null);
 
   if (loggedInUser) {
@@ -2159,10 +2315,15 @@ const openEditProduct = (
  setEditProductBrand(
    product.brand || ""
  );
- setEditProductImage(
-   product.image || ""
- );
+setEditProductImage(
+  product.image || ""
+);
 
+setEditProductImageFile(null);
+
+setEditProductImagePreview(
+  product.image ? imageUrl(product.image) : ""
+);
   setEditProductCategory(
     product.category_id ||
      product.categoryId ||
@@ -2177,13 +2338,69 @@ const closeEditProduct = () => {
   setEditProductPrice("");
   setEditProductBrand("");
   setEditProductImage("");
+  setEditProductImageFile(null);
+  setEditProductImagePreview("");
   setEditProductCategory("");
+};
+const saveProductChanges = async (event) => {
+  event.preventDefault();
+
+  if (!editingProduct) return;
+
+  if (!editProductName.trim()) {
+    alert("Product name is required.");
+    return;
+  }
+
+  if (editProductPrice === "" || Number(editProductPrice) < 0) {
+    alert("Please enter a valid price.");
+    return;
+  }
+
+  if (!editProductCategory) {
+    alert("Please select a category.");
+    return;
+  }
+
+  setEditProductLoading(true);
+
+  try {
+    const formData = new FormData();
+    formData.append("user_id", loggedInUser.id);
+    formData.append("name", editProductName.trim());
+    formData.append("description", editProductDescription.trim());
+    formData.append("price", Number(editProductPrice));
+    formData.append("brand", editProductBrand.trim());
+    formData.append("category_id", Number(editProductCategory));
+
+    // Only send an image if a new one was chosen; the backend keeps the old one otherwise
+    if (editProductImageFile) {
+      formData.append("image", editProductImageFile);
+    }
+
+    await adminRequest(
+      `${API_URL}/api/admin/products/${editingProduct.id}`,
+      { method: "PUT", body: formData } // no Content-Type header
+    );
+
+    alert("Product updated successfully.");
+
+    closeEditProduct();
+    await loadAdminProducts();
+    fetchProducts();
+  } catch (error) {
+    console.error("Update product error:", error);
+    alert(error.message);
+  } finally {
+    setEditProductLoading(false);
+  }
 };
 const openAddProduct = () => {
   setShowAddProduct(true);
 };
 
 const closeAddProduct = () => {
+  setShowNewCategoryInline(false);
   setShowAddProduct(false);
   setAddProductName("");
   setAddProductDescription("");
@@ -2192,6 +2409,8 @@ const closeAddProduct = () => {
   setAddProductImage("");
   setAddProductCategory("");
   setAddProductStock("0");
+  setAddProductImageFile(null);
+  setAddProductImagePreview("");
 };
 
 const saveNewProduct = async (event) => {
@@ -2212,119 +2431,289 @@ const saveNewProduct = async (event) => {
     return;
   }
 
+  if (!addProductImageFile) {
+    alert("Please select a product image.");
+    return;
+  }
+
   setAddProductLoading(true);
 
   try {
-    await adminRequest(`${API_URL}/api/admin/products`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_id: loggedInUser.id,
-        name: addProductName.trim(),
-        description: addProductDescription.trim(),
-        price: Number(addProductPrice),
-        brand: addProductBrand.trim(),
-        image: addProductImage.trim(),
-        category_id: Number(addProductCategory),
-        stock: Number(addProductStock) || 0,
-      }),
-    });
+    const formData = new FormData();
+
+    formData.append(
+      "user_id",
+      loggedInUser.id
+    );
+
+    formData.append(
+      "name",
+      addProductName.trim()
+    );
+
+    formData.append(
+      "description",
+      addProductDescription.trim()
+    );
+
+    formData.append(
+      "price",
+      Number(addProductPrice)
+    );
+
+    formData.append(
+      "brand",
+      addProductBrand.trim()
+    );
+
+    formData.append(
+      "category_id",
+      Number(addProductCategory)
+    );
+
+    formData.append(
+      "stock",
+      Number(addProductStock) || 0
+    );
+
+    formData.append(
+      "image",
+      addProductImageFile
+    );
+
+    await adminRequest(
+      `${API_URL}/api/admin/products`,
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
 
     alert("Product added successfully.");
 
     closeAddProduct();
     await loadAdminProducts();
     fetchProducts();
+
   } catch (error) {
-    console.error("Add product error:", error);
+    console.error(
+      "Add product error:",
+      error
+    );
+
     alert(error.message);
+
   } finally {
     setAddProductLoading(false);
   }
 };
 
-const saveProductChanges =
- async (event) => {
-  event.preventDefault();
 
-  if (!editingProduct) {
-    return;
+// ===== Categories =====
+const createCategory = async () => {
+  const name = newCategoryName.trim();
+
+  if (!name) {
+    alert("Enter a category name.");
+    return null;
   }
 
-  if (!editProductName.trim()) {
-    alert(
-      "Product name is required."
-    );
-    return;
-  }
+  setCategoryLoading(true);
 
-  if (
-    editProductPrice === "" ||
-    Number(editProductPrice) < 0
-  ){
-    alert(
-      "Please enter a valid price."
-    );
-    return;
-  }
-
-  if (!editProductCategory) {
-    alert(
-      "Please select a category."
-    );
-    return;
-  }
- setEditProductLoading(true);
-
- try {
-  await adminRequest(
-    `${API_URL}/api/admin/products/${editingProduct.id}`,
-    {
-      method: "PUT",
-      headers: {
-        "Content-Type":
-          "application/json",
-      },
+  try {
+    const data = await adminRequest(`${API_URL}/api/admin/categories`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        user_id:
-          loggedInUser.id,
-        name:
-          editProductName.trim(),
-        description:
-          editProductDescription.trim(),
-        price: Number(
-          editProductPrice
-        ),
-        brand:
-          editProductBrand.trim(),
-        image:
-          editProductImage.trim(),
-        category_id:
-          Number(
-            editProductCategory
-          ),
+        user_id: loggedInUser.id,
+        gender: newCategoryGender,
+        name,
       }),
-    }
-  );
+    });
 
-  alert(
-    "Product updated successfully."
-  );
+    const created = data.category;
 
-    closeEditProduct();
-    await loadAdminProducts();
-    fetchProducts();
-  } catch (error) {
-    console.error(
-      "Update product error:",
-      error
+    setCategories((current) =>
+      [...current, created].sort(
+        (a, b) =>
+          a.gender.localeCompare(b.gender) || a.name.localeCompare(b.name)
+      )
     );
+    setNewCategoryName("");
+
+    return created;
+  } catch (error) {
     alert(error.message);
+    return null;
   } finally {
-    setEditProductLoading(false);
+    setCategoryLoading(false);
   }
 };
 
+// ===== Forgot / Reset password =====
+const openForgot = () => {
+  setShowForgot(true);
+  setForgotEmail(loginEmail);
+  setForgotMessage("");
+  setForgotError("");
+};
+
+const closeForgot = () => {
+  setShowForgot(false);
+  setForgotMessage("");
+  setForgotError("");
+};
+
+const handleForgot = async (event) => {
+  event.preventDefault();
+  setForgotMessage("");
+  setForgotError("");
+
+  if (!forgotEmail.trim()) {
+    setForgotError("Please enter your email.");
+    return;
+  }
+
+  setForgotLoading(true);
+
+  try {
+    const response = await fetch(`${API_URL}/api/forgot-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: forgotEmail.trim() }),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || "Unable to send reset link.");
+    }
+
+    setForgotMessage(data.message);
+  } catch (error) {
+    setForgotError(error.message || "Unable to send reset link.");
+  } finally {
+    setForgotLoading(false);
+  }
+};
+
+const closeReset = () => {
+  setResetToken("");
+  setResetPassword("");
+  setResetConfirm("");
+  setResetMessage("");
+  setResetError("");
+  window.history.replaceState({}, "", window.location.pathname);
+};
+
+const handleReset = async (event) => {
+  event.preventDefault();
+  setResetMessage("");
+  setResetError("");
+
+  if (resetPassword.length < 6) {
+    setResetError("Password must contain at least 6 characters.");
+    return;
+  }
+
+  if (resetPassword !== resetConfirm) {
+    setResetError("Passwords do not match.");
+    return;
+  }
+
+  setResetLoading(true);
+
+  try {
+    const response = await fetch(`${API_URL}/api/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: resetToken, password: resetPassword }),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || "Unable to reset password.");
+    }
+
+    setResetMessage(data.message);
+
+    setTimeout(() => {
+      closeReset();
+      openLogin();
+      setLoginMessage("Password updated. Please log in.");
+    }, 1500);
+  } catch (error) {
+    setResetError(error.message || "Unable to reset password.");
+  } finally {
+    setResetLoading(false);
+  }
+};
+
+// ===== Admin Categories page =====
+const renderAdminCategories = () => (
+  <div>
+    <div className="admin-page-heading">
+      <div>
+        <h1>Categories</h1>
+        <p>Add categories for men's and women's products.</p>
+      </div>
+    </div>
+
+    <form
+      className="admin-form"
+      style={{ maxWidth: "420px", marginBottom: "30px" }}
+      onSubmit={async (event) => {
+        event.preventDefault();
+        await createCategory();
+      }}
+    >
+      <label>Gender</label>
+      <select
+        value={newCategoryGender}
+        onChange={(event) => setNewCategoryGender(event.target.value)}
+      >
+        <option value="Men">Men</option>
+        <option value="Women">Women</option>
+      </select>
+
+      <label>Category Name</label>
+      <input
+        type="text"
+        placeholder="e.g. Dresses"
+        value={newCategoryName}
+        onChange={(event) => setNewCategoryName(event.target.value)}
+      />
+
+      <button
+        type="submit"
+        className="admin-primary-button"
+        disabled={categoryLoading}
+      >
+        {categoryLoading ? "Adding..." : "Add Category"}
+      </button>
+    </form>
+
+    <div className="admin-product-table-wrapper">
+      <table className="admin-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Gender</th>
+            <th>Name</th>
+          </tr>
+        </thead>
+        <tbody>
+          {categories.map((category) => (
+            <tr key={category.id}>
+              <td>#{category.id}</td>
+              <td>{category.gender}</td>
+              <td>{category.name}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+);
 // =========================
 // Delete Product
 // =========================
@@ -2367,6 +2756,31 @@ const deleteAdminProduct =
    }
  };
 
+// =========================
+// Delete customer
+// =========================
+const deleteAdminCustomer = async (customer) => {
+  const confirmed = window.confirm(
+    `Delete ${customer.name} (${customer.email})? This cannot be undone.`
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    await adminRequest(
+      `${API_URL}/api/admin/customers/${customer.id}?user_id=${loggedInUser.id}`,
+      { method: "DELETE" }
+    );
+
+    alert("Customer deleted successfully.");
+    await loadAdminCustomers();
+  } catch (error) {
+    console.error("Delete customer error:", error);
+    alert(error.message);
+  }
+};
 // =========================
 // Open Stock Manager
 // =========================
@@ -2881,16 +3295,10 @@ const renderAdminProducts =
        <td>
          <div className="admin-product-cell">
           <img
-   src={
-     product.image
-      ? "/images/" +
-        product.image
-      : "/images/placeholder.jpg"
-   }
-   alt={
-     product.name
-   }
-  />
+
+  src={imageUrl(product.image)}
+  alt={product.name}
+/>
 
   <div>
    <strong>
@@ -3224,109 +3632,85 @@ const renderAdminOrders =
 // ADMIN CUSTOMERS UI
 // =====================================================
 
-const renderAdminCustomers =
- () => {
-   return (
+const renderAdminCustomers = () => {
+  return (
     <div>
-     <div className="admin-page-heading">
-      <div>
-        <h1>Customers</h1>
+      <div className="admin-page-heading">
+        <div>
+          <h1>Customers</h1>
+          <p>View registered UrbanWear customers.</p>
+        </div>
 
-      <p>
-       View registered UrbanWear
-       customers.
-      </p>
-     </div>
+        <button
+          className="admin-secondary-button"
+          onClick={loadAdminCustomers}
+        >
+          Refresh
+        </button>
+      </div>
 
-     <button
-      className="admin-secondary-button"
-      onClick={
-        loadAdminCustomers
-      }
-     >
-      Refresh
-     </button>
-    </div>
-
-    {adminLoading ? (
-     <div className="admin-loading">
-      Loading customers...
-     </div>
-) : adminCustomers.length ===
-  0?(
-  <div className="admin-empty">
-    <h3>
-     No customers found.
-    </h3>
-  </div>
-):(
-  <div className="admin-product-table-wrapper">
-    <table className="admin-table">
-     <thead>
-      <tr>
-       <th>ID</th>
-       <th>Name</th>
-       <th>Email</th>
-       <th>Admin</th>
-       <th>Joined</th>
-      </tr>
-     </thead>
-
-   <tbody>
-    {adminCustomers.map(
-     (customer) => (
-      <tr
-       key={
-         customer.id
-       }
-      >
-       <td>
-         #{customer.id}
-       </td>
-
-       <td>
-        <strong>
-         {customer.name ||
-          "-"}
-        </strong>
-       </td>
-
-       <td>
-        {customer.email ||
-         "-"}
-       </td>
-
-       <td>
-        {Number(
-          customer.is_admin ||
-           0
-        ) === 1 ? (
-          <span className="admin-badge">
-           Admin
-          </span>
-        ):(
-                 <span className="customer-badge">
-                   Customer
-                 </span>
-                )}
-               </td>
-
-               <td>
-                {formatOrderDate(
-                 customer.created_at
-                )}
-               </td>
+      {adminLoading ? (
+        <div className="admin-loading">Loading customers...</div>
+      ) : adminCustomers.length === 0 ? (
+        <div className="admin-empty">
+          <h3>No customers found.</h3>
+        </div>
+      ) : (
+        <div className="admin-product-table-wrapper">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Admin</th>
+                <th>Joined</th>
+                <th>Actions</th>
               </tr>
-            )
-           )}
-          </tbody>
-         </table>
-       </div>
-      )}
-     </div>
-   );
- };
+            </thead>
 
+            <tbody>
+              {adminCustomers.map((customer) => (
+                <tr key={customer.id}>
+                  <td>#{customer.id}</td>
+
+                  <td>
+                    <strong>{customer.name || "-"}</strong>
+                  </td>
+
+                  <td>{customer.email || "-"}</td>
+
+                  <td>
+                    {Number(customer.is_admin || 0) === 1 ? (
+                      <span className="admin-badge">Admin</span>
+                    ) : (
+                      <span className="customer-badge">Customer</span>
+                    )}
+                  </td>
+
+                  <td>{formatOrderDate(customer.created_at)}</td>
+
+                  <td>
+                    {Number(customer.is_admin || 0) === 1 ? (
+                      <span>—</span>
+                    ) : (
+                      <button
+                        className="admin-delete-button"
+                        onClick={() => deleteAdminCustomer(customer)}
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
 // =====================================================
 // ADMIN MAIN UI
 // =====================================================
@@ -3369,9 +3753,9 @@ const renderAdmin = () => {
     <small>
       ADMIN PANEL
     </small>
-  </div>
+     </div>
 
-  {/* Mobile hamburger */}
+    {/* Mobile hamburger */}
   <button
     type="button"
     className="admin-mobile-menu-button"
@@ -3438,6 +3822,17 @@ const renderAdmin = () => {
     >
       Customers
     </button>
+
+        <button
+      className={adminSection === "categories" ? "active" : ""}
+      onClick={() => {
+        changeAdminSection("categories");
+        setAdminMenuOpen(false);
+      }}
+    >
+      Categories
+    </button>
+
   </nav>
 
   <div className="admin-sidebar-bottom">
@@ -3449,6 +3844,7 @@ const renderAdmin = () => {
   </div>
 </aside>
 <section className="admin-content">
+
  {adminError && (
   <div className="admin-error">
     {adminError}
@@ -3470,6 +3866,8 @@ const renderAdmin = () => {
   {adminSection ===
    "customers" &&
    renderAdminCustomers()}
+
+    {adminSection === "categories" && renderAdminCategories()}
  </section>
 </div>
 
@@ -3485,6 +3883,7 @@ const renderAdmin = () => {
     </div>
 
     <button
+     type="button"
      className="admin-modal-close"
      onClick={closeAddProduct}
     >
@@ -3540,15 +3939,31 @@ const renderAdmin = () => {
      </div>
     </div>
 
-    <label>Image Filename</label>
-    <input
-     type="text"
-     placeholder="example.jpg"
-     value={addProductImage}
-     onChange={(event) =>
-       setAddProductImage(event.target.value)
-     }
-    />
+    <label>Product Image</label>
+
+    <div className="admin-image-upload">
+     <input
+      type="file"
+      accept="image/*"
+      onChange={(event) =>
+        handleImagePick(
+          event,
+          setAddProductImageFile,
+          setAddProductImagePreview,
+          addProductImagePreview
+        )
+      }
+     />
+
+     {addProductImagePreview && (
+      <div className="admin-image-preview">
+       <img
+        src={addProductImagePreview}
+        alt="Product Preview"
+       />
+      </div>
+     )}
+    </div>
 
     <div className="admin-form-two">
      <div>
@@ -3567,6 +3982,51 @@ const renderAdmin = () => {
         </option>
        ))}
       </select>
+            <button
+        type="button"
+        className="admin-secondary-button"
+        style={{ marginTop: "8px" }}
+        onClick={() => setShowNewCategoryInline((current) => !current)}
+      >
+        {showNewCategoryInline ? "Cancel" : "+ New category"}
+      </button>
+
+      {showNewCategoryInline && (
+        <div style={{ display: "flex", gap: "8px", marginTop: "10px" }}>
+          <select
+            value={newCategoryGender}
+            onChange={(event) => setNewCategoryGender(event.target.value)}
+          >
+            <option value="Men">Men</option>
+            <option value="Women">Women</option>
+          </select>
+
+          <input
+            type="text"
+            placeholder="New category name"
+            value={newCategoryName}
+            onChange={(event) => setNewCategoryName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.preventDefault();
+            }}
+          />
+
+          <button
+            type="button"
+            className="admin-primary-button"
+            disabled={categoryLoading}
+            onClick={async () => {
+              const created = await createCategory();
+              if (created) {
+                setAddProductCategory(String(created.id));
+                setShowNewCategoryInline(false);
+              }
+            }}
+          >
+            Add
+          </button>
+        </div>
+      )}
      </div>
 
      <div>
@@ -3603,31 +4063,21 @@ const renderAdmin = () => {
   </div>
  </div>
 )}
-
 {/* Edit Product Modal */}
 
 {editingProduct && (
  <div className="admin-modal-overlay">
   <div className="admin-modal">
    <div className="admin-modal-header">
-     <div>
-      <h2>
-       Edit Product
-      </h2>
-
-     <p>
-      Product #
-      {
-        editingProduct.id
-      }
-     </p>
+    <div>
+     <h2>Edit Product</h2>
+     <p>Product #{editingProduct.id}</p>
     </div>
 
     <button
+     type="button"
      className="admin-modal-close"
-     onClick={
-       closeEditProduct
-     }
+     onClick={closeEditProduct}
     >
      ×
     </button>
@@ -3635,170 +4085,113 @@ const renderAdmin = () => {
 
    <form
     className="admin-form"
-    onSubmit={
-      saveProductChanges
-    }
+    onSubmit={saveProductChanges}
    >
-    <label>
-      Product Name
-    </label>
-
+    <label>Product Name</label>
     <input
      type="text"
-     value={
-       editProductName
+     value={editProductName}
+     onChange={(event) =>
+       setEditProductName(event.target.value)
      }
- onChange={(event) =>
-   setEditProductName(
-     event.target
-      .value
-   )
- }
-/>
+    />
 
-<label>
- Description
-</label>
+    <label>Description</label>
+    <textarea
+     rows="4"
+     value={editProductDescription}
+     onChange={(event) =>
+       setEditProductDescription(event.target.value)
+     }
+    />
 
-<textarea
- rows="4"
- value={
-   editProductDescription
- }
- onChange={(event) =>
-   setEditProductDescription(
-     event.target
-      .value
-   )
- }
-/>
+    <div className="admin-form-two">
+     <div>
+      <label>Price</label>
+      <input
+       type="number"
+       min="0"
+       step="0.01"
+       value={editProductPrice}
+       onChange={(event) =>
+         setEditProductPrice(event.target.value)
+       }
+      />
+     </div>
 
-<div className="admin-form-two">
- <div>
-  <label>
-   Price
-  </label>
+     <div>
+      <label>Brand</label>
+      <input
+       type="text"
+       value={editProductBrand}
+       onChange={(event) =>
+         setEditProductBrand(event.target.value)
+       }
+      />
+     </div>
+    </div>
 
-  <input
-   type="number"
-   min="0"
-   step="0.01"
-   value={
-     editProductPrice
-   }
-   onChange={(event) =>
-     setEditProductPrice(
-       event.target
-        .value
-     )
-   }
-  />
- </div>
+    <label>Product Image</label>
 
- <div>
-  <label>
-   Brand
-  </label>
+    <div className="admin-image-upload">
+     <input
+      type="file"
+      accept="image/*"
+      onChange={(event) =>
+        handleImagePick(
+          event,
+          setEditProductImageFile,
+          setEditProductImagePreview,
+          editProductImagePreview
+        )
+      }
+     />
 
-  <input
-   type="text"
-   value={
-     editProductBrand
-   }
-   onChange={(event) =>
-     setEditProductBrand(
-       event.target
-        .value
-     )
-   }
-  />
- </div>
-</div>
-
-<label>
- Image Filename
-</label>
-
-<input
- type="text"
- placeholder="example.jpg"
- value={
-   editProductImage
- }
- onChange={(event) =>
-   setEditProductImage(
-     event.target
-      .value
-   )
- }
-/>
-
-<label>
- Category
-</label>
-
-<select
- value={
-   editProductCategory
- }
- onChange={(event) =>
-   setEditProductCategory(
-     event.target
-      .value
-   )
- }
->
- <option value="">
-   Select Category
- </option>
-
- {categories.map(
-  (category) => (
-       <option
-        key={
-          category.id
-        }
-        value={
-          category.id
-        }
-       >
-        {
-          category.gender
-        }{" "}
-        -{" "}
-        {
-          category.name
-        }
-       </option>
-      )
+     {editProductImagePreview && (
+      <div className="admin-image-preview">
+       <img
+        src={editProductImagePreview}
+        alt="Product Preview"
+       />
+      </div>
      )}
+    </div>
+
+    <label>Category</label>
+    <select
+     value={editProductCategory}
+     onChange={(event) =>
+       setEditProductCategory(event.target.value)
+     }
+    >
+          <option value="">Select Category</option>
+
+     {categories.map((category) => (
+      <option key={category.id} value={category.id}>
+       {category.gender} - {category.name}
+      </option>
+     ))}
     </select>
 
     <div className="admin-modal-actions">
      <button
       type="button"
       className="admin-secondary-button"
-      onClick={
-        closeEditProduct
-      }
+      onClick={closeEditProduct}
      >
       Cancel
      </button>
 
-      <button
-       type="submit"
-       className="admin-primary-button"
-       disabled={
-         editProductLoading
-       }
-      >
-       {editProductLoading
-         ? "Saving..."
-         : "Save Changes"}
-      </button>
-     </div>
-    </form>
-   </div>
+     <button
+      type="submit"
+      className="admin-primary-button"
+      disabled={editProductLoading}
+     >
+      {editProductLoading ? "Saving..." : "Save Changes"}
+     </button>
+    </div>
+   </form>
+  </div>
  </div>
 )}
 
@@ -4108,10 +4501,7 @@ const renderWishlist = () => {
  </button>
 
  <img
-  src={
-    "/images/" +
-    product.image
-  }
+  src={imageUrl(product.image)}
   alt={
     product.name
   }
@@ -4174,7 +4564,368 @@ const renderWishlist = () => {
   </main>
 );
 };
+const searchForm = (
+  <form className="nav-search" onSubmit={handleSearchSubmit}>
+    <input
+      type="text"
+      placeholder="Search products..."
+      aria-label="Search products"
+      value={searchText}
+      onChange={(event) => setSearchText(event.target.value)}
+    />
+    <button type="submit">Search</button>
+  </form>
+);
 
+
+// =====================================================
+// CUSTOMER PROFILE
+// =====================================================
+
+const loadProfile = async (userId) => {
+  setProfileLoading(true);
+  setProfileError("");
+
+  try {
+    const response = await fetch(`${API_URL}/api/profile/${userId}`);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || "Unable to load profile.");
+    }
+
+    setProfile(data);
+    setProfileForm({
+      name: data.name || "",
+      phone: data.phone || "",
+      gender: data.gender || "",
+      dob: data.dob || "",
+      address: data.address || "",
+      city: data.city || "",
+      pincode: data.pincode || "",
+    });
+  } catch (error) {
+    console.error("Load profile error:", error);
+    setProfileError(error.message);
+  } finally {
+    setProfileLoading(false);
+  }
+};
+
+// Load the saved profile whenever a customer logs in
+useEffect(() => {
+  if (!loggedInUser || Number(loggedInUser.is_admin) === 1) {
+    setProfile(null);
+    return;
+  }
+
+  loadProfile(loggedInUser.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [loggedInUser?.id]);
+
+const openProfile = () => {
+  if (!loggedInUser) {
+    openLogin();
+    return;
+  }
+
+  setShowProfile(true);
+  setShowCart(false);
+  setShowCheckout(false);
+  setOrderSuccess(false);
+  setShowOrders(false);
+  setShowAdmin(false);
+
+  setShowWishlist(false);
+  setSelectedOrder(null);
+  setSelectedProduct(null);
+  setSelectedSize("");
+  setShowRegister(false);
+  setShowLogin(false);
+  setIsSearchOpen(false);
+  setProfileMessage("");
+  setProfileError("");
+
+  loadProfile(loggedInUser.id);
+};
+const updateProfileField = (field, value) => {
+  setProfileForm((current) => ({ ...current, [field]: value }));
+};
+
+const saveProfile = async (event) => {
+  event.preventDefault();
+  setProfileMessage("");
+  setProfileError("");
+
+  if (!profileForm.name.trim()) {
+    setProfileError("Please enter your name.");
+    return;
+  }
+
+  if (profileForm.phone && !/^[0-9]{10}$/.test(profileForm.phone)) {
+    setProfileError("Please enter a valid 10-digit mobile number.");
+    return;
+  }
+
+  if (profileForm.pincode && !/^[0-9]{6}$/.test(profileForm.pincode)) {
+    setProfileError("Please enter a valid 6-digit pincode.");
+    return;
+  }
+
+  setProfileSaving(true);
+
+  try {
+    const response = await fetch(
+      `${API_URL}/api/profile/${loggedInUser.id}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(profileForm),
+      }
+    );
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || "Unable to save profile.");
+    }
+
+    // Keep the navbar greeting in sync with the new name
+    const updatedUser = { ...loggedInUser, name: data.user.name };
+    setLoggedInUser(updatedUser);
+    localStorage.setItem("urbanwearUser", JSON.stringify(updatedUser));
+
+    setProfile((current) => ({ ...current, ...profileForm }));
+    setProfileMessage("Profile updated successfully.");
+  } catch (error) {
+    console.error("Save profile error:", error);
+    setProfileError(error.message);
+  } finally {
+    setProfileSaving(false);
+  }
+};
+
+// After an order, remember the delivery details for next time
+const saveCheckoutDetailsToProfile = async () => {
+  if (!loggedInUser || !profile || !saveDetailsToProfile) {
+    return;
+  }
+
+  const merged = {
+    name: profile.name || loggedInUser.name || "",
+    phone: checkoutPhone.trim(),
+    gender: profile.gender || "",
+    dob: profile.dob || "",
+    address: checkoutAddress.trim(),
+    city: checkoutCity.trim(),
+    pincode: checkoutPincode.trim(),
+  };
+
+  try {
+    const response = await fetch(
+      `${API_URL}/api/profile/${loggedInUser.id}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(merged),
+      }
+    );
+
+    if (response.ok) {
+      setProfile((current) => ({ ...current, ...merged }));
+      setProfileForm((current) => ({ ...current, ...merged }));
+    }
+  } catch (error) {
+    console.error("Save checkout details error:", error);
+  }
+};
+
+const renderProfile = () => {
+  if (!loggedInUser) {
+    return null;
+  }
+
+  if (!profile) {
+    return (
+      <main className="profile-page">
+        <button className="back-button" onClick={showAllProducts}>
+          ← Back to Store
+        </button>
+
+        <div className="profile-container">
+          {profileLoading ? (
+            <div className="loading-message">Loading your profile...</div>
+          ) : (
+            <>
+              <div className="login-error">
+                {profileError || "Unable to load your profile."}
+              </div>
+              <button
+                type="button"
+                className="register-button"
+                onClick={() => loadProfile(loggedInUser.id)}
+              >
+                Try again
+              </button>
+            </>
+          )}
+        </div>
+      </main>
+    );
+  }
+
+  const initial = (profileForm.name || loggedInUser.name || "?")
+    .trim()
+    .charAt(0)
+    .toUpperCase();
+
+  const memberSinceRaw = profile.created_at
+    ? new Date(profile.created_at).toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+    : "";
+  const memberSince =
+    memberSinceRaw && memberSinceRaw !== "Invalid Date" ? memberSinceRaw : "";
+
+  return (
+    <main className="profile-page">
+      <button className="back-button" onClick={showAllProducts}>
+        ← Back to Store
+      </button>
+
+      <div className="profile-container">
+        <div className="profile-header">
+          <div className="profile-avatar">{initial}</div>
+          <div>
+            <h1>My Profile</h1>
+            <p>
+              {profile.email}
+              {memberSince ? ` · Member since ${memberSince}` : ""}
+            </p>
+          </div>
+        </div>
+
+        <form className="profile-form" onSubmit={saveProfile}>
+          <label>Full Name</label>
+          <input
+            type="text"
+            value={profileForm.name}
+            onChange={(event) =>
+              updateProfileField("name", event.target.value)
+            }
+          />
+
+          <label>Email</label>
+          <input type="email" value={profile.email || ""} disabled />
+
+          <div className="profile-row">
+            <div>
+              <label>Mobile Number</label>
+              <input
+                type="tel"
+                placeholder="10-digit mobile number"
+                maxLength="10"
+                value={profileForm.phone}
+                onChange={(event) =>
+                  updateProfileField(
+                    "phone",
+                    event.target.value.replace(/\D/g, "")
+                  )
+                }
+              />
+            </div>
+
+            <div>
+              <label>Gender</label>
+              <select
+                value={profileForm.gender}
+                onChange={(event) =>
+                  updateProfileField("gender", event.target.value)
+                }
+              >
+                <option value="">Select gender</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+                <option value="Prefer not to say">Prefer not to say</option>
+              </select>
+            </div>
+          </div>
+
+          <label>Date of Birth</label>
+          <input
+            type="date"
+            max={new Date().toISOString().split("T")[0]}
+            value={profileForm.dob}
+            onChange={(event) =>
+              updateProfileField("dob", event.target.value)
+            }
+          />
+
+          <h3 className="profile-section-title">Delivery Address</h3>
+          <p className="profile-note">
+            Saved here and filled in automatically at checkout.
+          </p>
+
+          <label>Address</label>
+          <textarea
+            rows="3"
+            placeholder="House no, street, area"
+            value={profileForm.address}
+            onChange={(event) =>
+              updateProfileField("address", event.target.value)
+            }
+          />
+
+          <div className="profile-row">
+            <div>
+              <label>City</label>
+              <input
+                type="text"
+                value={profileForm.city}
+                onChange={(event) =>
+                  updateProfileField("city", event.target.value)
+                }
+              />
+            </div>
+
+            <div>
+              <label>Pincode</label>
+              <input
+                type="text"
+                placeholder="6-digit pincode"
+                maxLength="6"
+                value={profileForm.pincode}
+                onChange={(event) =>
+                  updateProfileField(
+                    "pincode",
+                    event.target.value.replace(/\D/g, "")
+                  )
+                }
+              />
+            </div>
+          </div>
+
+          {profileError && (
+            <div className="register-error">{profileError}</div>
+          )}
+          {profileMessage && (
+            <div className="register-success">{profileMessage}</div>
+          )}
+
+          <button
+            type="submit"
+            className="register-button"
+            disabled={profileSaving}
+          >
+            {profileSaving ? "Saving..." : "Save Profile"}
+          </button>
+        </form>
+      </div>
+    </main>
+  );
+};
 // =====================================================
 // RENDER
 // =====================================================
@@ -4196,7 +4947,7 @@ return (
     >
       UrbanWear
     </div>
-
+    {searchForm}
     {/* Mobile hamburger */}
     <button
       type="button"
@@ -4229,25 +4980,25 @@ return (
         Home
       </button>
 
-      <button
-        onClick={() => {
-          setShowCategories(false);
-          setMobileMenuOpen(false);
-          showMenProducts();
-        }}
-      >
-        Men
-      </button>
+{/*       <button */}
+{/*         onClick={() => { */}
+{/*           setShowCategories(false); */}
+{/*           setMobileMenuOpen(false); */}
+{/*           showMenProducts(); */}
+{/*         }} */}
+{/*       > */}
+{/*         Men */}
+{/*       </button> */}
 
-      <button
-        onClick={() => {
-          setShowCategories(false);
-          setMobileMenuOpen(false);
-          showWomenProducts();
-        }}
-      >
-        Women
-      </button>
+{/*       <button */}
+{/*         onClick={() => { */}
+{/*           setShowCategories(false); */}
+{/*           setMobileMenuOpen(false); */}
+{/*           showWomenProducts(); */}
+{/*         }} */}
+{/*       > */}
+{/*         Women */}
+{/*       </button> */}
 
       <div
         className="category-menu"
@@ -4311,15 +5062,15 @@ return (
         )}
       </div>
 
-      <button
-        onClick={() => {
-          setShowCategories(false);
-          toggleSearch();
-          setMobileMenuOpen(false);
-        }}
-      >
-        Search
-      </button>
+{/*       <button */}
+{/*         onClick={() => { */}
+{/*           setShowCategories(false); */}
+{/*           toggleSearch(); */}
+{/*           setMobileMenuOpen(false); */}
+{/*         }} */}
+{/*       > */}
+{/*         Search */}
+{/*       </button> */}
 
       {/* Wishlist */}
       <button
@@ -4379,10 +5130,20 @@ return (
             </button>
           )}
 
-          <span className="welcome-user">
-            Hi,{" "}
-            {loggedInUser.name}
-          </span>
+                  {isAdmin ? (
+            <span className="welcome-user">Hi, {loggedInUser.name}</span>
+          ) : (
+            <button
+              type="button"
+              className="profile-nav-button"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                openProfile();
+              }}
+            >
+              Hi, {loggedInUser.name}
+            </button>
+          )}
 
           <button
             onClick={() => {
@@ -4467,6 +5228,76 @@ return (
 
 {showAdmin ? (
   renderAdmin()
+) : resetToken ? (
+  /* Reset Password */
+  <main className="login-page">
+    <button className="back-button" onClick={closeReset}>
+      ← Back to Store
+    </button>
+
+    <div className="login-container">
+      <div className="login-header">
+        <h1>Create New Password</h1>
+        <p>Choose a new password for your account.</p>
+      </div>
+
+      <form className="login-form" onSubmit={handleReset}>
+        <label>New Password</label>
+        <input
+          type="password"
+          placeholder="Minimum 6 characters"
+          value={resetPassword}
+          onChange={(event) => setResetPassword(event.target.value)}
+        />
+
+        <label>Confirm Password</label>
+        <input
+          type="password"
+          placeholder="Re-enter your password"
+          value={resetConfirm}
+          onChange={(event) => setResetConfirm(event.target.value)}
+        />
+
+        {resetError && <div className="login-error">{resetError}</div>}
+        {resetMessage && <div className="login-success">{resetMessage}</div>}
+
+        <button type="submit" className="login-button" disabled={resetLoading}>
+          {resetLoading ? "Saving..." : "Update Password"}
+        </button>
+      </form>
+    </div>
+  </main>
+) : showLogin && showForgot ? (
+  /* Forgot Password */
+  <main className="login-page">
+    <button className="back-button" onClick={closeForgot}>
+      ← Back to Login
+    </button>
+
+    <div className="login-container">
+      <div className="login-header">
+        <h1>Forgot Password</h1>
+        <p>Enter your account email and we'll send you a reset link.</p>
+      </div>
+
+      <form className="login-form" onSubmit={handleForgot}>
+        <label>Email</label>
+        <input
+          type="email"
+          placeholder="Enter your email"
+          value={forgotEmail}
+          onChange={(event) => setForgotEmail(event.target.value)}
+        />
+
+        {forgotError && <div className="login-error">{forgotError}</div>}
+        {forgotMessage && <div className="login-success">{forgotMessage}</div>}
+
+        <button type="submit" className="login-button" disabled={forgotLoading}>
+          {forgotLoading ? "Sending..." : "Send Reset Link"}
+        </button>
+      </form>
+    </div>
+  </main>
 ) : showLogin ? (
   /* Login */
 
@@ -4532,7 +5363,23 @@ return (
    )
  }
 />
-
+<div style={{ textAlign: "right", marginTop: "-6px", marginBottom: "10px" }}>
+  <button
+    type="button"
+    onClick={openForgot}
+    style={{
+      background: "none",
+      border: "none",
+      color: "#111",
+      textDecoration: "underline",
+      cursor: "pointer",
+      fontSize: "13px",
+      padding: 0,
+    }}
+  >
+    Forgot password?
+  </button>
+</div>
 {loginError && (
   <div className="login-error">
    {
@@ -5147,7 +5994,14 @@ return (
   />
  </div>
 </div>
-
+<label className="save-details-option">
+  <input
+    type="checkbox"
+    checked={saveDetailsToProfile}
+    onChange={(event) => setSaveDetailsToProfile(event.target.checked)}
+  />
+  Save these delivery details to my profile
+</label>
 {checkoutError && (
  <div className="checkout-error">
    {
@@ -5182,10 +6036,7 @@ return (
       }
      >
       <img
-        src={
-          "/images/" +
-          item.image
-        }
+       src={imageUrl(item.image)}
         alt={
           item.name
         }
@@ -5508,12 +6359,7 @@ return (
          }
        >
          <img
-           src={
-             item.image
-               ? "/images/" +
-                 item.image
-               : "/images/placeholder.jpg"
-           }
+           src={imageUrl(item.image)}
            alt={
              item.name ||
              "Product"
@@ -5903,10 +6749,7 @@ return (
          }
         >
          <img
-           src={
-             "/images/" +
-             item.image
-           }
+           src={imageUrl(item.image)}
            alt={
              item.name
            }
@@ -6041,6 +6884,8 @@ return (
        </main>
    ) : showWishlist ? (
   renderWishlist()
+) : showProfile ? (
+  renderProfile()
 ) : selectedProduct ? (
        /* Product Details */
 
@@ -6062,10 +6907,7 @@ return (
       <div className="product-details">
        <div className="product-details-image">
          <img
-          src={
-            "/images/" +
-            selectedProduct.image
-          }
+         src={imageUrl(selectedProduct.image)}
           alt={
             selectedProduct.name
           }
@@ -6241,11 +7083,11 @@ return (
        window.scrollTo({ top: 0, behavior: "smooth" });
       }}
      >
-      <img
-       src={"/images/" + product.image}
-       alt={product.name}
-       className="product-image"
-      />
+    <img
+     src={imageUrl(product.image)}
+     alt={product.name}
+     className="product-image"
+    />
 
       <h3>{product.name}</h3>
 
@@ -6348,9 +7190,9 @@ return (
 <main>
  <div className="products-heading-row">
   <h2>
-   {searchText.trim()
+   {activeSearch
     ? 'Search Results for "' +
-      searchText +
+      activeSearch +
       '"'
     : selectedCategory
     ? selectedCategory
@@ -6679,10 +7521,7 @@ return (
 </button>
 
 <img
- src={
-   "/images/" +
-   product.image
- }
+src={imageUrl(product.image)}
  alt={
    product.name
  }

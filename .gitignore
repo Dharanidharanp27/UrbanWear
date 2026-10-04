@@ -5,6 +5,7 @@ venv/
 .venv/
 .idea/
 .env
+*.env
 *.pyc
 pythonProject1/
 app.py.txt
