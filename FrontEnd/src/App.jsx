@@ -1328,6 +1328,7 @@ fetch(`${API_URL}/api/login`, {
    console.log("LOGIN USER:", data.user);
    console.log("IS ADMIN:", data.user?.is_admin);
    setLoggedInUser(data.user);
+   localStorage.setItem("urbanwearToken", data.token);
 
   localStorage.setItem(
     "urbanwearUser",
@@ -1375,6 +1376,7 @@ fetch(`${API_URL}/api/login`, {
 // =========================
 
 const handleLogout = () => {
+ localStorage.removeItem("urbanwearToken");
  setLoggedInUser(null);
  localStorage.removeItem(
    "urbanwearUser"
@@ -2101,24 +2103,22 @@ const openAdmin = (userOverride = null) => {
 // Admin Request Helper
 // =========================
 
-const adminRequest = async (
-  url,
-  options = {}
-) => {
-  const response = await fetch(
-   url,
-   options
- );
+const adminRequest = async (url, options = {}) => {
+  const token = localStorage.getItem("urbanwearToken");
 
- const data =
-  await response.json();
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      Authorization: `Bearer ${token}`,
+    },
+  });
 
- if (!response.ok) {
-   throw new Error(
-     data.message ||
-      "Admin request failed."
-   );
- }
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message || "Admin request failed.");
+  }
 
   return data;
 };
@@ -4951,7 +4951,7 @@ return (
     {searchForm}
     {/* Mobile hamburger */}
     <button
-      type="button"c
+      type="button"
       className="mobile-menu-button"
       onClick={() =>
         setMobileMenuOpen(

@@ -13,6 +13,8 @@ from werkzeug.utils import secure_filename
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 import secrets
+import jwt
+from functools import wraps
 
 app = Flask(__name__)
 
@@ -62,7 +64,40 @@ SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")
 SMTP_FROM = os.environ.get("SMTP_FROM", SMTP_USER)
 RESET_TOKEN_MINUTES = 30
 
+JWT_SECRET = os.environ.get("JWT_SECRET", "dev-secret-change-me")
+DEMO_ADMIN_EMAIL = "demo-admin@urbanwear.com"
+def make_token(user):
+    return jwt.encode(
+        {
+            "id": user["id"],
+            "email": user["email"],
+            "is_admin": int(user["is_admin"]),
+            "exp": utc_now() + timedelta(hours=8),
+        },
+        JWT_SECRET,
+        algorithm="HS256",
+    )
+def admin_required(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        token = request.headers.get("Authorization", "").replace("Bearer ", "")
 
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        except jwt.InvalidTokenError:
+            return jsonify({"message": "Please login again"}), 401
+
+        if not payload.get("is_admin"):
+            return jsonify({"message": "Admin access required"}), 403
+
+        # Demo admin is read-only
+        if payload["email"] == DEMO_ADMIN_EMAIL and request.method != "GET":
+            return jsonify({"message": "Demo admin is read-only"}), 403
+
+        request.admin_id = payload["id"]
+        return f(*args, **kwargs)
+
+    return wrapper
 def utc_now():
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
@@ -545,6 +580,7 @@ def login_user():
 
     return jsonify({
         "message": "Login successful",
+        "token": make_token(user),
         "user": {
             "id": user["id"],
             "name": user["name"],
@@ -1746,6 +1782,7 @@ def verify_admin(user_id, cursor):
 # =========================
 
 @app.route("/api/admin/stats", methods=["GET"])
+@admin_required
 def admin_stats():
     admin_id = request.args.get("user_id")
 
