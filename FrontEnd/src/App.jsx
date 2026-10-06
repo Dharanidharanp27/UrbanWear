@@ -5323,7 +5323,31 @@ return (
      account.
     </p>
    </div>
-
+    {/*THE DEMO BOX HERE */}
+     <div
+  style={{
+    background: "#f5f5f5",
+    border: "1px dashed #999",
+    borderRadius: "8px",
+    padding: "12px",
+    marginBottom: "16px",
+    fontSize: "13px",
+  }}
+>
+  <strong>Recruiter / Reviewer?</strong>
+  <p style={{ margin: "6px 0" }}>
+    Try the admin panel (read-only demo).
+  </p>
+  <button
+    type="button"
+    onClick={() => {
+      setLoginEmail("demo-admin@urbanwear.com");
+      setLoginPassword("Demo@1234");
+    }}
+  >
+    Fill demo admin login
+  </button>
+</div>
    <form
     className="login-form"
     onSubmit={
