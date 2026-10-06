@@ -1845,6 +1845,7 @@ def admin_stats():
 # =========================
 
 @app.route("/api/admin/products", methods=["GET"])
+@admin_required
 def admin_get_products():
     admin_id = request.args.get("user_id")
 
@@ -1914,6 +1915,7 @@ def admin_get_products():
 # =========================
 
 @app.route("/api/admin/orders", methods=["GET"])
+@admin_required
 def admin_get_orders():
     admin_id = request.args.get("user_id")
 
@@ -1972,6 +1974,7 @@ def admin_get_orders():
 # =========================
 
 @app.route("/api/admin/orders/<int:order_id>/status", methods=["PUT"])
+@admin_required
 def admin_update_order_status(order_id):
     data = request.get_json()
 
@@ -2066,6 +2069,7 @@ def admin_update_order_status(order_id):
 # =========================
 
 @app.route("/api/admin/customers", methods=["GET"])
+@admin_required
 def admin_get_customers():
     admin_id = request.args.get("user_id")
 
@@ -2114,6 +2118,7 @@ def admin_get_customers():
 # =========================
 
 @app.route("/api/admin/customers/<int:customer_id>", methods=["DELETE"])
+@admin_required
 def admin_delete_customer(customer_id):
     admin_id = request.args.get("user_id")
 
@@ -2186,6 +2191,7 @@ def admin_delete_customer(customer_id):
 # =========================
 
 @app.route("/api/admin/products/<int:product_id>", methods=["PUT"])
+@admin_required
 def admin_update_product(product_id):
     admin_id = request.form.get("user_id")
     name = (request.form.get("name") or "").strip()
@@ -2260,6 +2266,7 @@ def admin_update_product(product_id):
 # =========================
 
 @app.route("/api/admin/products/<int:product_id>/stock", methods=["PUT"])
+@admin_required
 def admin_update_stock(product_id):
     data = request.get_json()
 
@@ -2380,6 +2387,7 @@ def admin_update_stock(product_id):
 # =========================
 
 @app.route("/api/admin/products/<int:product_id>", methods=["DELETE"])
+@admin_required
 def admin_delete_product(product_id):
     admin_id = request.args.get("user_id")
 
@@ -2615,6 +2623,7 @@ def remove_from_wishlist(user_id, product_id):
 # =========================
 
 @app.route("/api/admin/products", methods=["POST"])
+@admin_required
 def admin_add_product():
 
     admin_id = request.form.get("user_id")
@@ -2846,6 +2855,7 @@ def serve_product_image(filename):
 # =========================
 
 @app.route("/api/admin/categories", methods=["POST"])
+@admin_required
 def admin_add_category():
     data = request.get_json() or {}
     admin_id = data.get("user_id")
