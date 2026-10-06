@@ -3746,9 +3746,10 @@ const renderAdmin = () => {
  <div className="admin-layout">
  <aside className={`admin-sidebar ${adminMenuOpen ? "mobile-open" : ""}`}>
   <div className="admin-sidebar-brand">
-    <span>
-      UrbanWear
-    </span>
+     <img
+    src="/urbanwear-nav-logo.svg"
+    alt="UrbanWear"
+  />
 
     <small>
       ADMIN PANEL
@@ -4939,18 +4940,18 @@ return (
      {!showAdmin && (
   <header className="navbar">
     <div
-      className="logo"
-      onClick={() => {
-        setMobileMenuOpen(false);
-        showAllProducts();
-      }}
-    >
-      UrbanWear
-    </div>
+  className="logo"
+  onClick={() => {
+    setMobileMenuOpen(false);
+    showAllProducts();
+  }}
+>
+  <img src="/urbanwear-nav-logo.svg" alt="UrbanWear" />
+</div>
     {searchForm}
     {/* Mobile hamburger */}
     <button
-      type="button"
+      type="button"c
       className="mobile-menu-button"
       onClick={() =>
         setMobileMenuOpen(

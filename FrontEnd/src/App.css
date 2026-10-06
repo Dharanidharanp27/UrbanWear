@@ -68,12 +68,18 @@ Navigation Bar
 }
 
 .logo {
-  font-size: 28px;
-  font-weight: 800;
-  letter-spacing: 1.5px;
+  display: flex;
+  align-items: center;
   cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
+  height: 55px;
+  overflow: hidden;
+}
+
+.logo img {
+  width: 240px;
+  height: 70px;
+  object-fit: contain;
+  display: block;
 }
 
 .nav-links {
